@@ -1,4 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+allowBuilds:
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver
+
 # apps/engine is a Python (uv) project and is intentionally not a pnpm workspace member.

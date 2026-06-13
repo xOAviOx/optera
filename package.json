@@ -14,7 +14,9 @@
     "type-check": "turbo run type-check",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "engine:dev": "cd apps/engine && uv run uvicorn app.main:app --reload --port 8000",
-    "engine:test": "cd apps/engine && uv run pytest -q"
+    "engine:test": "cd apps/engine && uv run pytest -q",
+    "auto-push": "zsh scripts/auto-push.sh",
+    "auto-push:once": "AUTO_PUSH_ONCE=1 zsh scripts/auto-push.sh"
   },
   "devDependencies": {
     "prettier": "^3.4.2",

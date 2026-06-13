@@ -29,6 +29,10 @@ build/
 supabase/.branches/
 supabase/.temp/
 
+# Auto-push watcher
+.auto-push.log
+.auto-push.lock
+
 # IDE / OS
 .DS_Store
 .idea/
