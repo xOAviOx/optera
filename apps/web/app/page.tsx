@@ -1,7 +1,13 @@
+import Link from "next/link";
+
 import { Disclaimer } from "@optera/ui";
 
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getEngineHealth } from "@/lib/api";
+import { getBrokerStatus } from "@/lib/engine";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { getAccessToken } from "@/lib/supabase/server";
 
 const MODULES = [
   { id: "M2", title: "Auth + broker connect", note: "Upstox OAuth, encrypted tokens" },
@@ -18,6 +24,11 @@ export default async function DashboardPage() {
   const health = await getEngineHealth();
   const engineUp = health?.status === "ok";
 
+  const token = isSupabaseConfigured ? await getAccessToken() : null;
+  const loggedIn = Boolean(token);
+  const broker = token ? await getBrokerStatus(token) : null;
+  const brokerConnected = Boolean(broker?.connected);
+
   return (
     <div className="space-y-6">
       <section className="space-y-2">
@@ -33,9 +44,38 @@ export default async function DashboardPage() {
 
       <div className="flex flex-wrap gap-3">
         <StatusBadge label="Engine" ok={engineUp} detail={health?.version ? `v${health.version}` : "offline"} />
-        <StatusBadge label="Broker" ok={false} detail="not connected" />
+        <StatusBadge
+          label="Broker"
+          ok={brokerConnected}
+          detail={
+            !loggedIn
+              ? "sign in to connect"
+              : brokerConnected
+                ? broker?.reconnect_needed
+                  ? "reconnect needed"
+                  : "Upstox connected"
+                : "not connected"
+          }
+        />
         <StatusBadge label="Market" ok={false} detail="09:15–15:30 IST" />
       </div>
+
+      {loggedIn && !brokerConnected && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Connect your broker to go live</CardTitle>
+            <CardDescription>
+              Link Upstox (read-only) to see live positions, Greeks and scenarios. No orders are
+              ever placed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/onboarding" className={buttonVariants()}>
+              Connect Upstox
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       <Disclaimer />
 
