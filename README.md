@@ -64,6 +64,21 @@ pnpm engine:test   # pytest (quant gets textbook reference cases in M3)
 - M3 **Quant core** ✅ — Black-Scholes (generalized, b-carry), Brent/Newton IV solver,
   Greeks, payoff, scenario, POP (lognormal + Monte Carlo). 40 textbook-referenced tests.
   Live endpoints: `POST /payoff`, `/scenario`, `/pop`.
+- M2 **Auth + broker connect** ✅ — Supabase auth (Google + email, session middleware),
+  Fernet-encrypted broker tokens, Supabase JWT verification, Upstox OAuth
+  (`/broker/upstox/login-url`, `/auth/broker/connect`, `/broker/analytics-token`,
+  `/broker/status`), onboarding wizard with risk-disclosure gating. Degrades gracefully
+  until Supabase/Upstox keys are set. 53 engine tests.
 
-Next: **M2** Auth + Upstox broker connect (needs Supabase project + Upstox API keys).
-See `CLAUDE.md` §10 for the full plan.
+### Configuring auth + broker (to exercise M2 end-to-end)
+
+1. Create a **Supabase** project → copy URL + anon key → `apps/web/.env.local`; copy the
+   service-role key + JWT secret → `apps/engine/.env`. Run `supabase/migrations/*.sql`.
+2. Enable **Google** provider in Supabase Auth (optional) and set the redirect to
+   `<web>/auth/callback`.
+3. Create an **Upstox** API app → API key/secret + redirect URI
+   `<web>/auth/broker/callback` → `apps/engine/.env`.
+4. Generate `TOKEN_ENCRYPTION_KEY`:
+   `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+
+Next: **M4** Live positions + WS stream (ticker ingestion, normalized positions, live risk push).
