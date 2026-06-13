@@ -93,6 +93,35 @@ class PopResponse(BaseModel):
     mode: str
 
 
+class LoginUrlResponse(BaseModel):
+    url: str
+
+
+class BrokerConnectRequest(BaseModel):
+    code: str
+    state: str | None = None
+
+
+class AnalyticsTokenRequest(BaseModel):
+    analytics_token: str
+
+
+class BrokerConnectResponse(BaseModel):
+    connected: bool
+    broker: str
+    status: str
+    expires_at: str | None = None
+
+
+class BrokerStatusResponse(BaseModel):
+    connected: bool
+    broker: str = "upstox"
+    status: str | None = None
+    expires_at: str | None = None
+    reconnect_needed: bool = True
+    has_analytics_token: bool = False
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str
