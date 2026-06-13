@@ -31,7 +31,9 @@ scope_for_path() {
 }
 
 humanize_name() {
-  local name="${1:r}"
+  local name="${1:t:r}"
+  name="${name#.}"
+  [[ -z "$name" ]] && name="${1:t}"
   print -r -- "${name//[-_]/ }"
 }
 
@@ -39,12 +41,17 @@ summarize_area() {
   local scope="$1"
   shift
   local -a names=()
-  local file base
+  local file base label
 
   for file in "$@"; do
+    file="${file%/}"
     base="${file:t}"
-    [[ "$base" == "package.json" || "$base" == "__init__.py" ]] && continue
-    names+=("$(humanize_name "$base")")
+    [[ -z "$base" ]] && continue
+    [[ "$base" == "package.json" || "$base" == "__init__.py" || "$base" == "*.tsbuildinfo" ]] && continue
+    [[ "$base" == *.tsbuildinfo ]] && continue
+    label="$(humanize_name "$base")"
+    [[ -z "$label" || "$label" == " " ]] && continue
+    names+=("$label")
   done
 
   if (( ${#names[@]} == 0 )); then
@@ -70,6 +77,7 @@ build_commit_message() {
     [[ -z "$line" ]] && continue
     change_status="${line[1,2]}"
     path="${line[4,-1]}"
+    path="${path%/}"
 
     case "$change_status" in
       "??"|"A "|"A?"|"AM") added+=("$path") ;;
