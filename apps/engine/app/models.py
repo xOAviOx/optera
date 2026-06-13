@@ -79,6 +79,20 @@ class ScenarioResponse(BaseModel):
     new_greeks: PortfolioGreeks
 
 
+class PopRequest(BaseModel):
+    legs: list[Leg]
+    spot: float
+    atm_iv: float  # decimal, e.g. 0.18
+    days_to_expiry: float | None = None  # falls back to legs' expiry horizon
+    mode: str = "lognormal"  # "lognormal" | "monte_carlo"
+    n_paths: int = 10_000
+
+
+class PopResponse(BaseModel):
+    probability_of_profit: float | None
+    mode: str
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

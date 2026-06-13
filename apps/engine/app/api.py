@@ -11,9 +11,12 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from app.models import (
     PayoffRequest,
     PayoffResponse,
+    PopRequest,
+    PopResponse,
     ScenarioRequest,
     ScenarioResponse,
 )
+from app.services import quant_service
 
 router = APIRouter()
 
@@ -44,20 +47,20 @@ async def portfolio_greeks() -> dict:
     raise _todo("M4")
 
 
-# ── Quant endpoints (M3/M5) ───────────────────────────────────────────────────
-@router.post("/payoff", response_model=PayoffResponse)
-async def payoff(_: PayoffRequest) -> PayoffResponse:
-    raise _todo("M3/M5")
+# ── Quant endpoints (M3 — live) ───────────────────────────────────────────────
+@router.post("/payoff", response_model=PayoffResponse, tags=["quant"])
+async def payoff(req: PayoffRequest) -> PayoffResponse:
+    return quant_service.compute_payoff(req)
 
 
-@router.post("/scenario", response_model=ScenarioResponse)
-async def scenario(_: ScenarioRequest) -> ScenarioResponse:
-    raise _todo("M3/M5")
+@router.post("/scenario", response_model=ScenarioResponse, tags=["quant"])
+async def scenario(req: ScenarioRequest) -> ScenarioResponse:
+    return quant_service.compute_scenario(req)
 
 
-@router.post("/pop")
-async def pop() -> dict:
-    raise _todo("M3/M5")
+@router.post("/pop", response_model=PopResponse, tags=["quant"])
+async def pop(req: PopRequest) -> PopResponse:
+    return quant_service.compute_pop(req)
 
 
 # ── Chain / IV (M6) ───────────────────────────────────────────────────────────
