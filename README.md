@@ -59,7 +59,11 @@ pnpm engine:test   # pytest (quant gets textbook reference cases in M3)
 
 ## Build status
 
-M1 **Scaffold** ✅ — monorepo, web shell (dark, nav, dashboard), FastAPI skeleton with the §6
-API contract stubbed, Supabase schema + RLS, env wiring.
+- M1 **Scaffold** ✅ — monorepo, web shell (dark, nav, dashboard + placeholder routes),
+  FastAPI skeleton with the §6 API contract, Supabase schema + RLS, env wiring.
+- M3 **Quant core** ✅ — Black-Scholes (generalized, b-carry), Brent/Newton IV solver,
+  Greeks, payoff, scenario, POP (lognormal + Monte Carlo). 40 textbook-referenced tests.
+  Live endpoints: `POST /payoff`, `/scenario`, `/pop`.
 
-Next: **M2** Auth + Upstox broker connect. See `CLAUDE.md` §10 for the full plan.
+Next: **M2** Auth + Upstox broker connect (needs Supabase project + Upstox API keys).
+See `CLAUDE.md` §10 for the full plan.
