@@ -1,0 +1,4 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+# apps/engine is a Python (uv) project and is intentionally not a pnpm workspace member.

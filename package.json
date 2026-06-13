@@ -1,0 +1,24 @@
+{
+  "name": "optera",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.6.0",
+  "description": "Optera — AI Options Risk & Analytics Co-Pilot (education/analytics only, no advice)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "engine:dev": "cd apps/engine && uv run uvicorn app.main:app --reload --port 8000",
+    "engine:test": "cd apps/engine && uv run pytest -q"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  }
+}

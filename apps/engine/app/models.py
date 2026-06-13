@@ -1,0 +1,85 @@
+"""Pydantic models — keep in sync with packages/types (shared TS types)."""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from pydantic import BaseModel, Field
+
+
+class OptionType(str, Enum):
+    CALL = "CE"
+    PUT = "PE"
+
+
+class Side(str, Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+
+class Leg(BaseModel):
+    """A single option (or future) leg of a position/strategy."""
+
+    symbol: str
+    option_type: OptionType | None = None  # None => future/underlying
+    strike: float | None = None
+    expiry: str | None = None  # ISO date
+    side: Side
+    lots: int = Field(gt=0)
+    lot_size: int = Field(gt=0)
+    entry_price: float | None = None
+    iv: float | None = None  # decimal (e.g. 0.18 == 18%)
+
+
+class Greeks(BaseModel):
+    delta: float
+    gamma: float
+    theta: float  # per day
+    vega: float  # per 1 vol point
+    rho: float
+
+
+class PortfolioGreeks(BaseModel):
+    net: Greeks
+    delta_rupees_per_pct: float  # ₹ P&L per 1% underlying move
+    theta_rupees_per_day: float
+    vega_rupees_per_point: float
+    delta_direction: str  # "bullish" | "bearish" | "neutral"
+
+
+class PayoffRequest(BaseModel):
+    legs: list[Leg]
+    spot: float
+    spot_range_pct: float = 0.15
+    steps: int = 200
+    iv: float | None = None
+    days_to_expiry: float | None = None
+
+
+class PayoffResponse(BaseModel):
+    spots: list[float]
+    pnl_expiry: list[float]
+    pnl_t0: list[float]
+    breakevens: list[float]
+    max_profit: float | None
+    max_loss: float | None
+
+
+class ScenarioRequest(BaseModel):
+    legs: list[Leg]
+    spot: float
+    spot_move_pct: float = 0.0
+    iv_change_pts: float = 0.0
+    days_elapsed: float = 0.0
+
+
+class ScenarioResponse(BaseModel):
+    pnl_delta: float
+    per_leg: list[dict]
+    new_greeks: PortfolioGreeks
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    environment: str
