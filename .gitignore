@@ -24,6 +24,7 @@ dist/
 build/
 .turbo/
 *.egg-info/
+*.tsbuildinfo
 
 # Supabase local
 supabase/.branches/
