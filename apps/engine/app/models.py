@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class OptionType(str, Enum):
+class OptionType(StrEnum):
     CALL = "CE"
     PUT = "PE"
 
 
-class Side(str, Enum):
+class Side(StrEnum):
     BUY = "BUY"
     SELL = "SELL"
 
