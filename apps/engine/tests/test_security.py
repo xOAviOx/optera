@@ -78,3 +78,33 @@ def test_verify_jwt_expired(jwt_secret):
     expired = _mint(jwt_secret, exp=int(time.time()) - 10)
     with pytest.raises(ValueError):
         verify_jwt(expired)
+
+
+def test_verify_jwt_es256_via_jwks(monkeypatch):
+    """Modern Supabase projects sign with ES256 (asymmetric, JWKS). The verifier
+    must branch on the token `alg` and validate against the JWKS public key."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from app.security import auth
+
+    priv = ec.generate_private_key(ec.SECP256R1())
+
+    class _FakeSigningKey:
+        key = priv.public_key()
+
+    class _FakeJwksClient:
+        def get_signing_key_from_jwt(self, _token):
+            return _FakeSigningKey()
+
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    get_settings.cache_clear()
+    # Stub out the network fetch — we only want to prove the ES256 decode path.
+    monkeypatch.setattr(auth, "_jwks_client", lambda _url: _FakeJwksClient())
+
+    token = jwt.encode(
+        {"sub": "user-es256", "aud": "authenticated", "exp": int(time.time()) + 3600},
+        priv,
+        algorithm="ES256",
+    )
+    assert auth.verify_jwt(token) == "user-es256"
+    get_settings.cache_clear()
