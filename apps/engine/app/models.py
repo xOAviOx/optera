@@ -129,6 +129,31 @@ class MarginResponse(BaseModel):
     commodity: dict | None = None
 
 
+class ChatMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class StrategyContext(BaseModel):
+    """The user's current hypothetical structure, sent so the co-pilot's tools
+    can analyze it. Legs carry the same fields the quant endpoints expect."""
+
+    legs: list[Leg] = Field(default_factory=list)
+    spot: float
+    iv_pct: float = 14.0  # ATM IV in percent
+    dte: float = 7.0  # days to expiry
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage]
+    context: StrategyContext | None = None
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    flagged: bool = False  # advice filter replaced the model's output
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

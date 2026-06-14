@@ -35,9 +35,10 @@ class Settings(BaseSettings):
     # Quant
     risk_free_rate: float = 0.065
 
-    # AI gateway
+    # AI gateway. Model is env-config; gemini-2.5-flash is a known free-tier id.
+    # (Bump to gemini-3.5-flash / gemini-3-flash-preview if your key has access.)
     ai_chat_provider: str = "gemini"
-    ai_chat_model: str = "gemini-3-flash"
+    ai_chat_model: str = "gemini-2.5-flash"
     gemini_api_key: str = ""
     ai_alert_provider: str = "groq"
     ai_alert_model: str = "llama-3.1-8b-instant"

@@ -21,6 +21,8 @@ from app.models import (
     BrokerConnectRequest,
     BrokerConnectResponse,
     BrokerStatusResponse,
+    ChatRequest,
+    ChatResponse,
     LoginUrlResponse,
     MarginResponse,
     PayoffRequest,
@@ -222,9 +224,29 @@ async def alerts() -> dict:
 
 
 # ── AI co-pilot (M7) ──────────────────────────────────────────────────────────
-@router.post("/ai/chat")
-async def ai_chat() -> dict:
-    raise _todo("M7")
+@router.post("/ai/chat", response_model=ChatResponse, tags=["ai"])
+async def ai_chat(req: ChatRequest, user_id: str = Depends(get_current_user)) -> ChatResponse:
+    from app.ai import copilot
+    from app.ai.providers.base import LLMError, LLMNotConfigured
+    from app.ai.tools import StrategyContext
+
+    ctx = (
+        StrategyContext(
+            legs=req.context.legs,
+            spot=req.context.spot,
+            iv_pct=req.context.iv_pct,
+            dte=req.context.dte,
+        )
+        if req.context
+        else None
+    )
+    try:
+        reply = await copilot.run_chat([m.model_dump() for m in req.messages], ctx)
+    except LLMNotConfigured as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}") from exc
+    return ChatResponse(reply=reply.reply, flagged=reply.flagged)
 
 
 # ── Strategy / journal (M9) ───────────────────────────────────────────────────
