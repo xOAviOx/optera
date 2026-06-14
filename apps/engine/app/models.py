@@ -122,6 +122,13 @@ class BrokerStatusResponse(BaseModel):
     has_analytics_token: bool = False
 
 
+class MarginResponse(BaseModel):
+    used: float
+    available: float
+    equity: dict | None = None
+    commodity: dict | None = None
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

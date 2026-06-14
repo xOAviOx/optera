@@ -14,7 +14,8 @@ def test_health_ok():
 
 
 def test_stub_endpoint_returns_501():
-    res = client.get("/positions")
+    # /chain is an unauthenticated M6 stub — still returns 501.
+    res = client.get("/chain/NIFTY")
     assert res.status_code == 501
 
 

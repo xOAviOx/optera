@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 
+from app.brokers.base import NormalizedPosition
 from app.brokers.upstox import UpstoxAdapter
 from app.db import supabase
 from app.models import (
@@ -18,6 +20,7 @@ from app.models import (
     BrokerConnectResponse,
     BrokerStatusResponse,
     LoginUrlResponse,
+    MarginResponse,
     PayoffRequest,
     PayoffResponse,
     PopRequest,
@@ -27,7 +30,8 @@ from app.models import (
 )
 from app.security.auth import get_current_user
 from app.security.crypto import EncryptionNotConfigured, encrypt_token
-from app.services import quant_service
+from app.services import positions_service, quant_service
+from app.services.positions_service import BrokerNotConnected
 
 router = APIRouter()
 
@@ -50,6 +54,18 @@ def _next_token_expiry() -> str:
 
 def _config_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail=f"Broker/storage not configured: {exc}")
+
+
+def _broker_error(exc: Exception) -> HTTPException:
+    """Map broker/data-layer failures to HTTP responses for the live-data endpoints."""
+    if isinstance(exc, BrokerNotConnected):
+        return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, (EncryptionNotConfigured, supabase.SupabaseNotConfigured)):
+        return _config_error(exc)
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code
+        return HTTPException(status_code=502, detail=f"Upstox API error: {code}")
+    return HTTPException(status_code=502, detail=f"Broker request failed: {exc}")
 
 
 # ── Broker / auth (M2) ────────────────────────────────────────────────────────
@@ -141,14 +157,18 @@ async def broker_status(user_id: str = Depends(get_current_user)) -> BrokerStatu
 
 
 # ── Positions & portfolio (M4) ────────────────────────────────────────────────
-@router.get("/positions")
-async def positions() -> dict:
-    raise _todo("M4")
+@router.get("/positions", response_model=list[NormalizedPosition], tags=["positions"])
+async def positions(user_id: str = Depends(get_current_user)) -> list[NormalizedPosition]:
+    try:
+        return await positions_service.list_positions(user_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _broker_error(exc) from exc
 
 
 @router.get("/portfolio/greeks")
-async def portfolio_greeks() -> dict:
-    raise _todo("M4")
+async def portfolio_greeks(user_id: str = Depends(get_current_user)) -> dict:
+    # Needs a live spot + IV source (same machinery as the /stream risk engine).
+    raise _todo("M4 Phase 3 (live risk engine)")
 
 
 # ── Quant endpoints (M3 — live) ───────────────────────────────────────────────
@@ -178,9 +198,12 @@ async def iv_rank(symbol: str) -> dict:
     raise _todo("M6")
 
 
-@router.get("/margin")
-async def margin() -> dict:
-    raise _todo("M4")
+@router.get("/margin", response_model=MarginResponse, tags=["positions"])
+async def margin(user_id: str = Depends(get_current_user)) -> MarginResponse:
+    try:
+        return await positions_service.get_margin(user_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _broker_error(exc) from exc
 
 
 # ── Alerts (M8) ───────────────────────────────────────────────────────────────
