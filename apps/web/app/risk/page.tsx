@@ -20,6 +20,7 @@ import {
   type Side,
   type UiLeg,
 } from "@/lib/quant";
+import { useStrategyStore } from "@/lib/strategy-store";
 import { formatRupees } from "@/lib/utils";
 
 const DEFAULT_LOT = 75; // NIFTY; editable per leg
@@ -48,13 +49,15 @@ function presets(spot: number): Record<string, UiLeg[]> {
 }
 
 export default function RiskPage() {
-  const [spot, setSpot] = useState(23500);
-  const [ivPct, setIvPct] = useState(14);
-  const [dte, setDte] = useState(7);
-  const [legs, setLegs] = useState<UiLeg[]>(() => {
-    const atm = 23500;
-    return [leg("CE", "BUY", atm), leg("PE", "BUY", atm)];
-  });
+  // Strategy lives in the shared store so the co-pilot (/copilot) sees the same book.
+  const spot = useStrategyStore((s) => s.spot);
+  const ivPct = useStrategyStore((s) => s.ivPct);
+  const dte = useStrategyStore((s) => s.dte);
+  const legs = useStrategyStore((s) => s.legs);
+  const setSpot = useStrategyStore((s) => s.setSpot);
+  const setIvPct = useStrategyStore((s) => s.setIvPct);
+  const setDte = useStrategyStore((s) => s.setDte);
+  const setLegs = useStrategyStore((s) => s.setLegs);
 
   const [payoff, setPayoff] = useState<PayoffResponse | null>(null);
   const [pop, setPop] = useState<PopResponse | null>(null);
@@ -138,9 +141,9 @@ export default function RiskPage() {
   }, [legs, spot, ivPct, dte, spotMovePct, ivChangePts, daysElapsed]);
 
   const updateLeg = (id: string, patch: Partial<UiLeg>) =>
-    setLegs((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
-  const removeLeg = (id: string) => setLegs((ls) => ls.filter((l) => l.id !== id));
-  const addLeg = () => setLegs((ls) => [...ls, leg("CE", "BUY", Math.round(spot / 100) * 100)]);
+    setLegs(legs.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  const removeLeg = (id: string) => setLegs(legs.filter((l) => l.id !== id));
+  const addLeg = () => setLegs([...legs, leg("CE", "BUY", Math.round(spot / 100) * 100)]);
 
   return (
     <div className="space-y-6">
