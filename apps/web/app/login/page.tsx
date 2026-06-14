@@ -67,21 +67,6 @@ function LoginForm() {
     setBusy(false);
   }
 
-  async function googleAuth() {
-    setBusy(true);
-    setError(null);
-    const supabase = createClient();
-    const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo },
-    });
-    if (error) {
-      setError(error.message);
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="mx-auto max-w-md py-10">
       <Card>
@@ -90,14 +75,6 @@ function LoginForm() {
           <CardDescription>Analytics &amp; education only — never trading advice.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Button variant="outline" className="w-full" onClick={googleAuth} disabled={busy}>
-            Continue with Google
-          </Button>
-
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-          </div>
-
           <form onSubmit={emailAuth} className="space-y-3">
             <input
               type="email"
