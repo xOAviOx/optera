@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Disclaimer } from "@optera/ui";
 
 import { PayoffChart } from "@/components/risk/payoff-chart";
+import { SavedStrategies } from "@/components/risk/saved-strategies";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -164,7 +165,8 @@ export default function RiskPage() {
       <Disclaimer />
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
-        {/* ── Builder ─────────────────────────────────────────────── */}
+        {/* ── Builder + saved structures (left column) ────────────── */}
+        <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Strategy builder</CardTitle>
@@ -206,6 +208,8 @@ export default function RiskPage() {
             {error && <p className="text-sm text-[hsl(var(--loss))]">⚠ {error}</p>}
           </CardContent>
         </Card>
+        <SavedStrategies />
+        </div>
 
         {/* ── Payoff ──────────────────────────────────────────────── */}
         <Card>
