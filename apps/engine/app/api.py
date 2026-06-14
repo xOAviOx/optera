@@ -6,6 +6,8 @@ implements them, so the API shape is visible and testable from day one.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -28,10 +30,12 @@ from app.models import (
     ScenarioRequest,
     ScenarioResponse,
 )
-from app.security.auth import get_current_user
+from app.realtime import upstox_feed
+from app.security.auth import get_current_user, verify_jwt
 from app.security.crypto import EncryptionNotConfigured, encrypt_token
-from app.services import positions_service, quant_service
+from app.services import positions_service, quant_service, stream_service
 from app.services.positions_service import BrokerNotConnected
+from app.services.stream_service import AnalyticsTokenMissing
 
 router = APIRouter()
 
@@ -241,14 +245,87 @@ async def billing_webhook() -> dict:
 
 
 # ── Realtime stream (M4) ──────────────────────────────────────────────────────
-@router.websocket("/stream")
-async def stream(ws: WebSocket) -> None:
-    """Per-session live computed-risk push. M1: echo handshake so the contract is wired."""
-    await ws.accept()
-    await ws.send_json({"type": "hello", "msg": "Optera stream connected (stub — M4)"})
+async def _watch_disconnect(ws: WebSocket) -> None:
+    """Block until the client disconnects, so we can tear down the upstream feed.
+
+    (Inbound messages are drained here; mid-stream re-subscription is a later
+    enhancement.)
+    """
     try:
         while True:
-            data = await ws.receive_text()
-            await ws.send_json({"type": "echo", "data": data})
+            await ws.receive_text()
     except WebSocketDisconnect:
         return
+
+
+@router.websocket("/stream")
+async def stream(ws: WebSocket) -> None:
+    """Per-session live market-data push.
+
+    Auth: pass the Supabase access token as `?token=` (browsers can't set WS
+    headers). The first client message selects instruments:
+        {"instrument_keys": ["NSE_INDEX|Nifty 50", ...], "mode": "option_greeks"}
+    The feed is driven by the user's analytics token (no daily re-auth).
+    """
+    await ws.accept()
+
+    token = ws.query_params.get("token")
+    if not token:
+        await ws.send_json({"type": "error", "detail": "Missing ?token= (Supabase access token)"})
+        await ws.close(code=1008)
+        return
+    try:
+        user_id = verify_jwt(token)
+    except ValueError as exc:
+        await ws.send_json({"type": "error", "detail": f"Invalid token: {exc}"})
+        await ws.close(code=1008)
+        return
+
+    try:
+        analytics = await stream_service.analytics_token(user_id)
+    except AnalyticsTokenMissing as exc:
+        await ws.send_json({"type": "error", "detail": str(exc)})
+        await ws.close(code=1008)
+        return
+    except (EncryptionNotConfigured, supabase.SupabaseNotConfigured) as exc:
+        await ws.send_json({"type": "error", "detail": f"Server not configured: {exc}"})
+        await ws.close(code=1011)
+        return
+
+    try:
+        req = await ws.receive_json()
+    except WebSocketDisconnect:
+        return
+    instrument_keys = req.get("instrument_keys") if isinstance(req, dict) else None
+    mode = (req.get("mode") if isinstance(req, dict) else None) or upstox_feed.DEFAULT_MODE
+    if not isinstance(instrument_keys, list) or not instrument_keys:
+        await ws.send_json(
+            {"type": "error", "detail": "Send {'instrument_keys': [...]} to subscribe"}
+        )
+        await ws.close(code=1008)
+        return
+    if mode not in upstox_feed.VALID_MODES:
+        await ws.send_json({"type": "error", "detail": f"Invalid mode {mode!r}"})
+        await ws.close(code=1008)
+        return
+
+    await ws.send_json({"type": "subscribed", "instrument_keys": instrument_keys, "mode": mode})
+
+    # Pump live ticks until either the feed ends or the client disconnects.
+    tasks = {
+        asyncio.create_task(
+            stream_service.forward_ticks(ws.send_json, analytics, instrument_keys, mode)
+        ),
+        asyncio.create_task(_watch_disconnect(ws)),
+    }
+    _, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    for task in pending:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    for task in tasks - pending:
+        # A dead client raising inside forward_ticks is expected, not an error.
+        with contextlib.suppress(Exception):
+            task.result()
+    with contextlib.suppress(RuntimeError):
+        await ws.close()

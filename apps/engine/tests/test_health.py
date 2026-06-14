@@ -19,7 +19,5 @@ def test_stub_endpoint_returns_501():
     assert res.status_code == 501
 
 
-def test_stream_handshake():
-    with client.websocket_connect("/stream") as ws:
-        hello = ws.receive_json()
-        assert hello["type"] == "hello"
+# /stream is now an auth-gated live feed (M4 Phase 2); behavior is covered in
+# tests/test_stream.py.
