@@ -158,3 +158,77 @@ class HealthResponse(BaseModel):
     status: str
     version: str
     environment: str
+
+
+# ── Paper-trading simulator (hypothetical/paper only — no real orders, no advice)
+class SimMarketQuote(BaseModel):
+    symbol: str
+    spot: float
+    iv: float  # decimal
+
+
+class MarkedPosition(BaseModel):
+    id: str
+    symbol: str
+    option_type: str
+    strike: float
+    side: str
+    lots: int
+    lot_size: int
+    entry_tick: int
+    entry_price: float
+    expiry_tick: int
+    dte_days: float
+    mark_price: float
+    unrealized_pnl: float
+    value: float
+
+
+class SimAccountResponse(BaseModel):
+    capital: float
+    cash: float
+    realized_pnl: float
+    unrealized_pnl: float
+    equity: float
+    total_pnl: float
+    margin_used: float
+    available: float
+    clock_tick: int
+    positions: list[MarkedPosition]
+    greeks: PortfolioGreeks
+    market: list[SimMarketQuote]
+
+
+class SimOrderRequest(BaseModel):
+    symbol: str
+    option_type: OptionType
+    strike: float = Field(gt=0)
+    lots: int = Field(gt=0)
+    side: Side
+    dte_days: float = Field(default=7.0, ge=0)
+    tick: int = Field(ge=0)
+
+
+class SimCloseRequest(BaseModel):
+    position_id: str
+    tick: int = Field(ge=0)
+
+
+class SimChainQuote(BaseModel):
+    ltp: float
+
+
+class SimChainStrike(BaseModel):
+    strike: float
+    ce: SimChainQuote
+    pe: SimChainQuote
+
+
+class SimChainResponse(BaseModel):
+    symbol: str
+    spot: float
+    iv: float
+    dte_days: float
+    expiry_tick: int
+    lot_size: int
+    strikes: list[SimChainStrike]

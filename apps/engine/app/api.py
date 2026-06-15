@@ -31,12 +31,17 @@ from app.models import (
     PopResponse,
     ScenarioRequest,
     ScenarioResponse,
+    SimAccountResponse,
+    SimChainResponse,
+    SimCloseRequest,
+    SimOrderRequest,
 )
 from app.realtime import upstox_feed
 from app.security.auth import get_current_user, verify_jwt
 from app.security.crypto import EncryptionNotConfigured, encrypt_token
-from app.services import positions_service, quant_service, stream_service
+from app.services import positions_service, quant_service, sim_service, stream_service
 from app.services.positions_service import BrokerNotConnected
+from app.services.sim_service import PaperTablesMissing, SimError
 from app.services.stream_service import AnalyticsTokenMissing
 
 router = APIRouter()
@@ -72,6 +77,19 @@ def _broker_error(exc: Exception) -> HTTPException:
         code = exc.response.status_code
         return HTTPException(status_code=502, detail=f"Upstox API error: {code}")
     return HTTPException(status_code=502, detail=f"Broker request failed: {exc}")
+
+
+def _sim_error(exc: Exception) -> HTTPException:
+    """Map paper-simulator failures to HTTP responses."""
+    if isinstance(exc, PaperTablesMissing):
+        return HTTPException(status_code=503, detail=str(exc))
+    if isinstance(exc, SimError):
+        return HTTPException(status_code=400, detail=str(exc))
+    if isinstance(exc, (EncryptionNotConfigured, supabase.SupabaseNotConfigured)):
+        return _config_error(exc)
+    if isinstance(exc, httpx.HTTPStatusError):
+        return HTTPException(status_code=502, detail=f"Storage error: {exc.response.status_code}")
+    return HTTPException(status_code=502, detail=f"Simulator request failed: {exc}")
 
 
 # ── Broker / auth (M2) ────────────────────────────────────────────────────────
@@ -210,6 +228,65 @@ async def margin(user_id: str = Depends(get_current_user)) -> MarginResponse:
         return await positions_service.get_margin(user_id)
     except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
         raise _broker_error(exc) from exc
+
+
+# ── Paper-trading simulator (hypothetical/paper only — no real orders, no advice)
+@router.get("/sim/account", response_model=SimAccountResponse, tags=["sim"])
+async def sim_account(
+    tick: int = 0, user_id: str = Depends(get_current_user)
+) -> SimAccountResponse:
+    try:
+        return SimAccountResponse(**await sim_service.account_state(user_id, max(tick, 0)))
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _sim_error(exc) from exc
+
+
+@router.post("/sim/order", response_model=SimAccountResponse, tags=["sim"])
+async def sim_order(
+    req: SimOrderRequest, user_id: str = Depends(get_current_user)
+) -> SimAccountResponse:
+    try:
+        snap = await sim_service.place_order(
+            user_id,
+            symbol=req.symbol,
+            option_type=req.option_type.value,
+            strike=req.strike,
+            lots=req.lots,
+            side=req.side.value,
+            dte_days=req.dte_days,
+            tick=req.tick,
+        )
+        return SimAccountResponse(**snap)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _sim_error(exc) from exc
+
+
+@router.post("/sim/close", response_model=SimAccountResponse, tags=["sim"])
+async def sim_close(
+    req: SimCloseRequest, user_id: str = Depends(get_current_user)
+) -> SimAccountResponse:
+    try:
+        snap = await sim_service.close_position(user_id, req.position_id, req.tick)
+        return SimAccountResponse(**snap)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _sim_error(exc) from exc
+
+
+@router.post("/sim/reset", response_model=SimAccountResponse, tags=["sim"])
+async def sim_reset(user_id: str = Depends(get_current_user)) -> SimAccountResponse:
+    try:
+        return SimAccountResponse(**await sim_service.reset_account(user_id))
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _sim_error(exc) from exc
+
+
+@router.get("/sim/chain/{symbol}", response_model=SimChainResponse, tags=["sim"])
+async def sim_chain(symbol: str, tick: int = 0, dte_days: float = 7.0) -> SimChainResponse:
+    # Pure simulated market data (no user data), so this needs no auth.
+    try:
+        return SimChainResponse(**sim_service.chain(symbol, max(tick, 0), max(dte_days, 0.0)))
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _sim_error(exc) from exc
 
 
 # ── Alerts (M8) ───────────────────────────────────────────────────────────────

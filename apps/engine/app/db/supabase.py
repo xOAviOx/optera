@@ -87,3 +87,120 @@ async def get_broker_connection(user_id: str, broker: str = "upstox") -> dict[st
         resp.raise_for_status()
         rows = resp.json()
         return rows[0] if rows else None
+
+
+# ── Paper-trading simulator (M-sim) ───────────────────────────────────────────
+# The engine owns these writes (service role) so fills are priced server-side and
+# can't be tampered by the client; every query is scoped to the verified user_id.
+async def get_paper_account(user_id: str) -> dict[str, Any] | None:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base}/paper_accounts",
+            params={"user_id": f"eq.{user_id}", "select": "*", "limit": "1"},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+
+async def create_paper_account(user_id: str, capital: float) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    row = {
+        "user_id": user_id,
+        "capital": capital,
+        "cash": capital,
+        "realized_pnl": 0,
+        "clock_tick": 0,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(f"{base}/paper_accounts", headers=headers, json=[row])
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else row
+
+
+async def patch_paper_account(user_id: str, fields: dict[str, Any]) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            f"{base}/paper_accounts",
+            params={"user_id": f"eq.{user_id}"},
+            headers=headers,
+            json=fields,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else {}
+
+
+async def list_paper_positions(
+    user_id: str, status: str | None = None
+) -> list[dict[str, Any]]:
+    base, headers = _base_and_headers()
+    params = {"user_id": f"eq.{user_id}", "select": "*", "order": "opened_at.asc"}
+    if status:
+        params["status"] = f"eq.{status}"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(f"{base}/paper_positions", params=params, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_paper_position(user_id: str, position_id: str) -> dict[str, Any] | None:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base}/paper_positions",
+            params={
+                "user_id": f"eq.{user_id}",
+                "id": f"eq.{position_id}",
+                "select": "*",
+                "limit": "1",
+            },
+            headers=headers,
+        )
+        resp.raise_for_status()
+        rows = resp.json()
+        return rows[0] if rows else None
+
+
+async def insert_paper_position(row: dict[str, Any]) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(f"{base}/paper_positions", headers=headers, json=[row])
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else row
+
+
+async def patch_paper_position(
+    user_id: str, position_id: str, fields: dict[str, Any]
+) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            f"{base}/paper_positions",
+            params={"user_id": f"eq.{user_id}", "id": f"eq.{position_id}"},
+            headers=headers,
+            json=fields,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else {}
+
+
+async def delete_paper_positions(user_id: str) -> None:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.delete(
+            f"{base}/paper_positions",
+            params={"user_id": f"eq.{user_id}"},
+            headers=headers,
+        )
+        resp.raise_for_status()

@@ -78,9 +78,12 @@ def test_factory_selects_mock_in_demo_mode(demo_mode):
     assert adapter.requires_auth is False
 
 
-def test_factory_defaults_to_upstox():
+def test_factory_defaults_to_upstox(monkeypatch):
     from app.brokers.upstox import UpstoxAdapter
 
+    # Pin the broker so the test is hermetic regardless of the dev's local .env
+    # (which may set BROKER=mock for demo work).
+    monkeypatch.setattr(get_settings(), "broker", "upstox")
     factory._instances.clear()
     assert isinstance(factory.get_broker_adapter(), UpstoxAdapter)
 
