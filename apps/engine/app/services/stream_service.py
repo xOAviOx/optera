@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+from app.config import get_settings
 from app.db import supabase
-from app.realtime import upstox_feed
+from app.realtime import demo_feed, upstox_feed
 from app.realtime.feed_decode import Tick
 from app.security.crypto import decrypt_token
 
@@ -32,6 +33,24 @@ async def analytics_token(user_id: str) -> str:
             "No Upstox analytics token on file — add one to start the live feed."
         )
     return decrypt_token(conn["analytics_token_enc"])
+
+
+def is_demo() -> bool:
+    """True when the synthetic demo broker is active (BROKER=mock)."""
+    return (get_settings().broker or "upstox").lower() == "mock"
+
+
+async def resolve_feed_token(user_id: str) -> str:
+    """Feed token for the active mode: a placeholder in demo, the real analytics
+    token otherwise (which raises AnalyticsTokenMissing when absent)."""
+    if is_demo():
+        return "demo"
+    return await analytics_token(user_id)
+
+
+def active_tick_source() -> TickSource:
+    """The tick source for the active mode — synthetic in demo, live otherwise."""
+    return demo_feed.stream_ticks if is_demo() else upstox_feed.stream_ticks
 
 
 def tick_to_payload(tick: Tick) -> dict:

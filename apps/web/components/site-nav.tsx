@@ -1,4 +1,4 @@
-import { Activity, BarChart3, Bot, LineChart, ScrollText } from "lucide-react";
+import { Activity, BarChart3, Bot, Briefcase, LineChart, ScrollText } from "lucide-react";
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: Activity },
+  { href: "/positions", label: "Positions", icon: Briefcase },
   { href: "/risk", label: "Risk", icon: LineChart },
   { href: "/chain", label: "Chain", icon: BarChart3 },
   { href: "/copilot", label: "Co-Pilot", icon: Bot },

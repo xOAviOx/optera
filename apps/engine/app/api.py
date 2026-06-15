@@ -304,7 +304,7 @@ async def stream(ws: WebSocket) -> None:
         return
 
     try:
-        analytics = await stream_service.analytics_token(user_id)
+        analytics = await stream_service.resolve_feed_token(user_id)
     except AnalyticsTokenMissing as exc:
         await ws.send_json({"type": "error", "detail": str(exc)})
         await ws.close(code=1008)
@@ -336,7 +336,13 @@ async def stream(ws: WebSocket) -> None:
     # Pump live ticks until either the feed ends or the client disconnects.
     tasks = {
         asyncio.create_task(
-            stream_service.forward_ticks(ws.send_json, analytics, instrument_keys, mode)
+            stream_service.forward_ticks(
+                ws.send_json,
+                analytics,
+                instrument_keys,
+                mode,
+                tick_source=stream_service.active_tick_source(),
+            )
         ),
         asyncio.create_task(_watch_disconnect(ws)),
     }

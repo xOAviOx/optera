@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://localhost:6379"
 
+    # Active data broker for positions/holdings/market-data. "mock" serves a fully
+    # synthetic NIFTY/BANKNIFTY demo book with no credentials (Upstox OAuth, the
+    # connect flow, is separate and always Upstox).
+    broker: str = "upstox"
+
     # Broker: Upstox
     upstox_api_key: str = ""
     upstox_api_secret: str = ""

@@ -7,20 +7,21 @@ out of both the HTTP router and the broker adapter.
 
 from __future__ import annotations
 
-from app.brokers.base import NormalizedPosition
-from app.brokers.upstox import UpstoxAdapter
+from app.brokers.base import BrokerAdapter, NormalizedPosition
+from app.brokers.factory import get_broker_adapter
 from app.db import supabase
 from app.models import MarginResponse
 from app.security.crypto import decrypt_token
-
-_upstox = UpstoxAdapter()
 
 
 class BrokerNotConnected(RuntimeError):
     """Raised when the user has no usable Upstox access token on file."""
 
 
-async def _access_token(user_id: str) -> str:
+async def _access_token(user_id: str, adapter: BrokerAdapter) -> str:
+    # Demo brokers carry their own data and ignore the token entirely.
+    if not adapter.requires_auth:
+        return ""
     conn = await supabase.get_broker_connection(user_id, "upstox")
     if not conn or not conn.get("access_token_enc"):
         raise BrokerNotConnected("Upstox is not connected for this user.")
@@ -28,13 +29,16 @@ async def _access_token(user_id: str) -> str:
 
 
 async def list_positions(user_id: str) -> list[NormalizedPosition]:
-    return await _upstox.get_positions(await _access_token(user_id))
+    adapter = get_broker_adapter()
+    return await adapter.get_positions(await _access_token(user_id, adapter))
 
 
 async def list_holdings(user_id: str) -> list[NormalizedPosition]:
-    return await _upstox.get_holdings(await _access_token(user_id))
+    adapter = get_broker_adapter()
+    return await adapter.get_holdings(await _access_token(user_id, adapter))
 
 
 async def get_margin(user_id: str) -> MarginResponse:
-    raw = await _upstox.get_margin(await _access_token(user_id))
+    adapter = get_broker_adapter()
+    raw = await adapter.get_margin(await _access_token(user_id, adapter))
     return MarginResponse(**raw)

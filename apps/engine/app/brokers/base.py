@@ -31,6 +31,9 @@ class BrokerAdapter(ABC):
     """All brokers implement this. Tokens are passed in already-decrypted by the caller."""
 
     broker_name: str
+    # Real brokers need a decrypted access token; demo/mock brokers ignore it, so
+    # callers can skip the token lookup entirely when this is False.
+    requires_auth: bool = True
 
     @abstractmethod
     async def get_positions(self, access_token: str) -> list[NormalizedPosition]:
