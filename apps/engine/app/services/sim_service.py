@@ -55,9 +55,18 @@ def _require_symbol(symbol: str) -> market.SymbolSpec:
 
 async def _get_or_create_account(user_id: str) -> dict:
     account = await _guard(supabase.get_paper_account(user_id))
-    if account is None:
-        account = await _guard(supabase.create_paper_account(user_id, STARTING_CAPITAL))
-    return account
+    if account is not None:
+        return account
+    try:
+        return await _guard(supabase.create_paper_account(user_id, STARTING_CAPITAL))
+    except httpx.HTTPStatusError as exc:
+        # 409 = another concurrent request already created it (e.g. React
+        # strict-mode double-fires the initial load). Re-fetch instead of failing.
+        if exc.response.status_code == 409:
+            existing = await _guard(supabase.get_paper_account(user_id))
+            if existing is not None:
+                return existing
+        raise
 
 
 async def _positions(user_id: str) -> list[PaperPosition]:
