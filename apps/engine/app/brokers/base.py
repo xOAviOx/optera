@@ -4,15 +4,6 @@ v1 is READ-ONLY: positions/holdings/market-data only. No order placement methods
 here on purpose — that keeps us out of execution liability.
 """
 //
-//
-//
-//
-//
-//
-//
-//
-//
-///
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
