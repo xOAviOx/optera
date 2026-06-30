@@ -7,7 +7,7 @@ here on purpose — that keeps us out of execution liability.
 //
 //
 //
-
+//
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
