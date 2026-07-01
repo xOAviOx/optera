@@ -17,6 +17,13 @@ from app.brokers.base import NormalizedPosition
 from app.brokers.upstox import UpstoxAdapter
 from app.db import supabase
 from app.models import (
+    AlertCheckResponse,
+    AlertEvent,
+    AlertRule,
+    AlertRuleCreate,
+    AlertRulesResponse,
+    AlertRuleUpdate,
+    AlertsResponse,
     AnalyticsTokenRequest,
     BrokerConnectRequest,
     BrokerConnectResponse,
@@ -39,7 +46,14 @@ from app.models import (
 from app.realtime import upstox_feed
 from app.security.auth import get_current_user, verify_jwt
 from app.security.crypto import EncryptionNotConfigured, encrypt_token
-from app.services import positions_service, quant_service, sim_service, stream_service
+from app.services import (
+    alert_service,
+    positions_service,
+    quant_service,
+    sim_service,
+    stream_service,
+)
+from app.services.alert_service import AlertError, AlertTablesMissing
 from app.services.positions_service import BrokerNotConnected
 from app.services.sim_service import PaperTablesMissing, SimError
 from app.services.stream_service import AnalyticsTokenMissing
@@ -289,15 +303,85 @@ async def sim_chain(symbol: str, tick: int = 0, dte_days: float = 7.0) -> SimCha
         raise _sim_error(exc) from exc
 
 
-# ── Alerts (M8) ───────────────────────────────────────────────────────────────
-@router.get("/alert-rules")
-async def list_alert_rules() -> dict:
-    raise _todo("M8")
+# ── Alerts (M8) — education-only risk notifications, never advice ─────────────
+def _alert_error(exc: Exception) -> HTTPException:
+    """Map alert/monitoring failures to HTTP responses."""
+    if isinstance(exc, AlertTablesMissing):
+        return HTTPException(status_code=503, detail=str(exc))
+    if isinstance(exc, AlertError):
+        return HTTPException(status_code=400, detail=str(exc))
+    return _broker_error(exc)
 
 
-@router.get("/alerts")
-async def alerts() -> dict:
-    raise _todo("M8")
+@router.get("/alert-rules", response_model=AlertRulesResponse, tags=["alerts"])
+async def list_alert_rules(user_id: str = Depends(get_current_user)) -> AlertRulesResponse:
+    try:
+        return AlertRulesResponse(rules=await alert_service.list_rules(user_id))
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+
+
+@router.post("/alert-rules", response_model=AlertRule, tags=["alerts"])
+async def create_alert_rule(
+    req: AlertRuleCreate, user_id: str = Depends(get_current_user)
+) -> AlertRule:
+    try:
+        return await alert_service.create_rule(user_id, req.model_dump(mode="json"))
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+
+
+@router.patch("/alert-rules/{rule_id}", response_model=AlertRule, tags=["alerts"])
+async def update_alert_rule(
+    rule_id: str, req: AlertRuleUpdate, user_id: str = Depends(get_current_user)
+) -> AlertRule:
+    fields = req.model_dump(mode="json", exclude_none=True)
+    try:
+        return await alert_service.update_rule(user_id, rule_id, fields)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+
+
+@router.delete("/alert-rules/{rule_id}", tags=["alerts"])
+async def delete_alert_rule(rule_id: str, user_id: str = Depends(get_current_user)) -> dict:
+    try:
+        await alert_service.delete_rule(user_id, rule_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+    return {"deleted": True}
+
+
+@router.get("/alerts", response_model=AlertsResponse, tags=["alerts"])
+async def alerts(
+    limit: int = 50, user_id: str = Depends(get_current_user)
+) -> AlertsResponse:
+    try:
+        return AlertsResponse(alerts=await alert_service.list_events(user_id, limit))
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+
+
+@router.post("/alerts/{alert_id}/ack", response_model=AlertEvent, tags=["alerts"])
+async def acknowledge_alert(
+    alert_id: str, user_id: str = Depends(get_current_user)
+) -> AlertEvent:
+    try:
+        return await alert_service.acknowledge(user_id, alert_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+
+
+@router.post("/alerts/check", response_model=AlertCheckResponse, tags=["alerts"])
+async def check_alerts_now(user_id: str = Depends(get_current_user)) -> AlertCheckResponse:
+    """Evaluate the user's rules against a fresh risk snapshot right now.
+
+    Also returns the snapshot so the UI can show live metric values next to rules.
+    """
+    try:
+        snapshot, fired, checked = await alert_service.check_user(user_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _alert_error(exc) from exc
+    return AlertCheckResponse(snapshot=snapshot, fired=fired, checked_rules=checked)
 
 
 # ── AI co-pilot (M7) ──────────────────────────────────────────────────────────

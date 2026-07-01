@@ -204,3 +204,112 @@ async def delete_paper_positions(user_id: str) -> None:
             headers=headers,
         )
         resp.raise_for_status()
+
+
+# ── Monitoring + alerts (M8) ──────────────────────────────────────────────────
+# Rules are user-owned config; alert events are written by the engine after it
+# evaluates a rule (service role). Every query is scoped to the verified user_id.
+async def list_alert_rules(user_id: str, enabled: bool | None = None) -> list[dict[str, Any]]:
+    base, headers = _base_and_headers()
+    params = {"user_id": f"eq.{user_id}", "select": "*", "order": "created_at.desc"}
+    if enabled is not None:
+        params["enabled"] = f"eq.{str(enabled).lower()}"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(f"{base}/alert_rules", params=params, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def insert_alert_rule(row: dict[str, Any]) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(f"{base}/alert_rules", headers=headers, json=[row])
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else row
+
+
+async def patch_alert_rule(
+    user_id: str, rule_id: str, fields: dict[str, Any]
+) -> dict[str, Any] | None:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            f"{base}/alert_rules",
+            params={"user_id": f"eq.{user_id}", "id": f"eq.{rule_id}"},
+            headers=headers,
+            json=fields,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+
+
+async def delete_alert_rule(user_id: str, rule_id: str) -> None:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.delete(
+            f"{base}/alert_rules",
+            params={"user_id": f"eq.{user_id}", "id": f"eq.{rule_id}"},
+            headers=headers,
+        )
+        resp.raise_for_status()
+
+
+async def list_alert_rule_user_ids() -> list[str]:
+    """Distinct user_ids that have at least one enabled rule (monitor fan-out)."""
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base}/alert_rules",
+            params={"select": "user_id", "enabled": "eq.true"},
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return sorted({row["user_id"] for row in resp.json()})
+
+
+async def list_alerts(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base}/alerts",
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "*",
+                "order": "created_at.desc",
+                "limit": str(max(1, min(limit, 200))),
+            },
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def insert_alert(row: dict[str, Any]) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(f"{base}/alerts", headers=headers, json=[row])
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else row
+
+
+async def patch_alert(
+    user_id: str, alert_id: str, fields: dict[str, Any]
+) -> dict[str, Any] | None:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            f"{base}/alerts",
+            params={"user_id": f"eq.{user_id}", "id": f"eq.{alert_id}"},
+            headers=headers,
+            json=fields,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None

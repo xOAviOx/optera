@@ -1,4 +1,13 @@
-import { Activity, BarChart3, Bot, Briefcase, LineChart, ScrollText, Zap } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Bell,
+  Bot,
+  Briefcase,
+  LineChart,
+  ScrollText,
+  Zap,
+} from "lucide-react";
 import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -12,6 +21,7 @@ const NAV = [
   { href: "/risk", label: "Risk", icon: LineChart },
   { href: "/chain", label: "Chain", icon: BarChart3 },
   { href: "/copilot", label: "Co-Pilot", icon: Bot },
+  { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/journal", label: "Journal", icon: ScrollText },
 ];
 

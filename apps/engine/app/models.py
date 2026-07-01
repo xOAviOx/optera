@@ -232,3 +232,97 @@ class SimChainResponse(BaseModel):
     expiry_tick: int
     lot_size: int
     strikes: list[SimChainStrike]
+
+
+# ── Monitoring + alerts (M8) — education-only notifications, never advice ─────
+class AlertMetric(StrEnum):
+    """Risk metrics a rule can watch. All are read from the user's risk snapshot."""
+
+    TOTAL_PNL = "total_pnl"  # ₹, signed
+    DELTA_RUPEES_PER_PCT = "delta_rupees_per_pct"  # ₹ per 1% underlying move
+    THETA_RUPEES_PER_DAY = "theta_rupees_per_day"  # ₹ per day (decay is negative)
+    VEGA_RUPEES_PER_POINT = "vega_rupees_per_point"  # ₹ per 1 vol point
+    MARGIN_UTILIZATION_PCT = "margin_utilization_pct"  # 0–100
+    STRESS_LOSS_RUPEES = "stress_loss_rupees"  # ₹, worst loss over ±3/±5% moves
+
+
+class AlertOperator(StrEnum):
+    GT = "gt"
+    LT = "lt"
+    ABS_GT = "abs_gt"
+
+
+class AlertRuleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    metric: AlertMetric
+    operator: AlertOperator
+    threshold: float
+    enabled: bool = True
+    cooldown_minutes: int = Field(default=60, ge=1, le=24 * 60)
+
+
+class AlertRuleUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    metric: AlertMetric | None = None
+    operator: AlertOperator | None = None
+    threshold: float | None = None
+    enabled: bool | None = None
+    cooldown_minutes: int | None = Field(default=None, ge=1, le=24 * 60)
+
+
+class AlertRule(BaseModel):
+    id: str
+    name: str
+    metric: AlertMetric
+    operator: AlertOperator
+    threshold: float
+    enabled: bool
+    cooldown_minutes: int
+    last_triggered_at: str | None = None
+    created_at: str | None = None
+
+
+class AlertEvent(BaseModel):
+    id: str
+    rule_id: str | None = None
+    rule_name: str
+    metric: AlertMetric
+    operator: AlertOperator
+    threshold: float
+    observed: float
+    message: str
+    ai_phrased: bool = False
+    acknowledged: bool = False
+    created_at: str | None = None
+
+
+class AlertRulesResponse(BaseModel):
+    rules: list[AlertRule]
+
+
+class AlertsResponse(BaseModel):
+    alerts: list[AlertEvent]
+
+
+class RiskSnapshot(BaseModel):
+    """Current portfolio risk metrics the rules are evaluated against.
+
+    Metrics are None when they can't be computed right now (e.g. no option
+    positions, or spot/IV unavailable for the live broker).
+    """
+
+    total_pnl: float | None = None
+    delta_rupees_per_pct: float | None = None
+    theta_rupees_per_day: float | None = None
+    vega_rupees_per_point: float | None = None
+    margin_utilization_pct: float | None = None
+    stress_loss_rupees: float | None = None
+    option_legs: int = 0
+    underlyings: list[str] = Field(default_factory=list)
+    skipped_underlyings: list[str] = Field(default_factory=list)
+
+
+class AlertCheckResponse(BaseModel):
+    snapshot: RiskSnapshot
+    fired: list[AlertEvent]
+    checked_rules: int

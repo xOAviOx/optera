@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     ai_alert_model: str = "llama-3.1-8b-instant"
     groq_api_key: str = ""
 
+    # Alerts / monitoring (M8)
+    alert_monitor_enabled: bool = True
+    alert_check_interval_seconds: int = 60
+
     # Notifications / billing
     telegram_bot_token: str = ""
     razorpay_key_id: str = ""
