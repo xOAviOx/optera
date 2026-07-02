@@ -30,6 +30,9 @@ from app.models import (
     BrokerStatusResponse,
     ChatRequest,
     ChatResponse,
+    JournalResponse,
+    JournalTrade,
+    JournalTradeCreate,
     LoginUrlResponse,
     MarginResponse,
     PayoffRequest,
@@ -42,18 +45,22 @@ from app.models import (
     SimChainResponse,
     SimCloseRequest,
     SimOrderRequest,
+    StrategyAnalyzeRequest,
+    StrategyAnalyzeResponse,
 )
 from app.realtime import upstox_feed
 from app.security.auth import get_current_user, verify_jwt
 from app.security.crypto import EncryptionNotConfigured, encrypt_token
 from app.services import (
     alert_service,
+    journal_service,
     positions_service,
     quant_service,
     sim_service,
     stream_service,
 )
 from app.services.alert_service import AlertError, AlertTablesMissing
+from app.services.journal_service import JournalError, JournalTablesMissing
 from app.services.positions_service import BrokerNotConnected
 from app.services.sim_service import PaperTablesMissing, SimError
 from app.services.stream_service import AnalyticsTokenMissing
