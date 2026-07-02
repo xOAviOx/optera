@@ -106,3 +106,64 @@ def test_strategy_analyze_endpoint():
     assert body["defined_risk"] is True
     assert "greeks" in body and "net" in body["greeks"]
     assert body["net_premium"] < 0
+
+
+# ── journal stats (pure) ──────────────────────────────────────────────────────
+def test_compute_stats_mixed_book():
+    trades = [
+        {"realized_pnl": 1000.0, "underlying": "NIFTY", "closed_at": "2026-06-01"},
+        {"realized_pnl": -400.0, "underlying": "NIFTY", "closed_at": "2026-06-02"},
+        {"realized_pnl": 600.0, "underlying": "BANKNIFTY", "closed_at": "2026-06-03"},
+        {"realized_pnl": None, "underlying": "NIFTY", "closed_at": None},  # open
+    ]
+    s = journal_service.compute_stats(trades)
+    assert s.closed_trades == 3
+    assert s.open_trades == 1
+    assert s.total_realized_pnl == 1200.0
+    assert abs(s.win_rate - 2 / 3) < 1e-9
+    assert s.avg_win == 800.0
+    assert s.avg_loss == -400.0
+    assert s.profit_factor == 4.0  # 1600 gross win / 400 gross loss
+    assert s.best == 1000.0
+    assert s.worst == -400.0
+    assert s.pnl_by_underlying == {"NIFTY": 600.0, "BANKNIFTY": 600.0}
+    assert s.equity_curve == [1000.0, 600.0, 1200.0]  # cumulative, close-time order
+
+
+def test_compute_stats_empty_and_all_open():
+    assert journal_service.compute_stats([]).closed_trades == 0
+    open_only = journal_service.compute_stats([{"realized_pnl": None, "closed_at": None}])
+    assert open_only.closed_trades == 0
+    assert open_only.open_trades == 1
+    assert open_only.win_rate is None
+    assert open_only.equity_curve == []
+
+
+def test_underlying_of_ignores_ui_placeholders():
+    assert journal_service.underlying_of([{"symbol": "LEG1"}, {"symbol": "NIFTY"}]) == "NIFTY"
+    assert journal_service.underlying_of([{"symbol": "LEG1"}]) is None
+    assert journal_service.underlying_of([]) is None
+
+
+def test_template_review_is_compliant_and_descriptive():
+    review = journal_service.template_review(
+        {
+            "realized_pnl": -1500.0,
+            "legs": [{"symbol": "NIFTY", "option_type": "CE", "strike": 22000, "side": "SELL",
+                      "lots": 1}],
+        }
+    )
+    _safe, flagged = advice_filter.screen(review)
+    assert flagged is False  # never advises
+    assert "advice nahi" in review.lower()
+
+    open_review = journal_service.template_review({"realized_pnl": None, "legs": []})
+    assert "open hai" in open_review.lower()
+
+
+# ── endpoint auth gating ──────────────────────────────────────────────────────
+def test_journal_endpoints_require_auth():
+    assert client.get("/journal").status_code == 401
+    assert client.post("/journal", json={"legs": []}).status_code == 401
+    assert client.post("/journal/some-id/review").status_code == 401
+    assert client.delete("/journal/some-id").status_code == 401
