@@ -417,15 +417,58 @@ async def ai_chat(req: ChatRequest, user_id: str = Depends(get_current_user)) ->
     return ChatResponse(reply=reply.reply, flagged=reply.flagged)
 
 
-# ── Strategy / journal (M9) ───────────────────────────────────────────────────
-@router.post("/strategy/analyze")
-async def strategy_analyze() -> dict:
-    raise _todo("M9")
+# ── Strategy / journal (M9) — hypothetical/paper only, never advice ────────────
+def _journal_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, JournalTablesMissing):
+        return HTTPException(status_code=503, detail=str(exc))
+    if isinstance(exc, JournalError):
+        return HTTPException(status_code=404, detail=str(exc))
+    return _broker_error(exc)
 
 
-@router.get("/journal")
-async def journal() -> dict:
-    raise _todo("M9")
+@router.post("/strategy/analyze", response_model=StrategyAnalyzeResponse, tags=["quant"])
+async def strategy_analyze(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
+    # Pure what-if math on a hypothetical structure — no user data, no auth needed.
+    return quant_service.analyze_strategy(req)
+
+
+@router.get("/journal", response_model=JournalResponse, tags=["journal"])
+async def journal(user_id: str = Depends(get_current_user)) -> JournalResponse:
+    try:
+        return await journal_service.list_trades_with_stats(user_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _journal_error(exc) from exc
+
+
+@router.post("/journal", response_model=JournalTrade, tags=["journal"])
+async def create_journal_trade(
+    req: JournalTradeCreate, user_id: str = Depends(get_current_user)
+) -> JournalTrade:
+    try:
+        return await journal_service.create_trade(user_id, req)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _journal_error(exc) from exc
+
+
+@router.post("/journal/{trade_id}/review", response_model=JournalTrade, tags=["journal"])
+async def review_journal_trade(
+    trade_id: str, user_id: str = Depends(get_current_user)
+) -> JournalTrade:
+    try:
+        return await journal_service.review_trade(user_id, trade_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _journal_error(exc) from exc
+
+
+@router.delete("/journal/{trade_id}", tags=["journal"])
+async def delete_journal_trade(
+    trade_id: str, user_id: str = Depends(get_current_user)
+) -> dict:
+    try:
+        await journal_service.delete_trade(user_id, trade_id)
+    except Exception as exc:  # noqa: BLE001 — mapped to HTTP below
+        raise _journal_error(exc) from exc
+    return {"deleted": True}
 
 
 # ── Billing (M10) ─────────────────────────────────────────────────────────────
