@@ -113,6 +113,36 @@ export function computePop(p: PopParams, signal?: AbortSignal): Promise<PopRespo
   return postJson<PopResponse>("/pop", p, signal);
 }
 
+export interface StrategyAnalyzeParams {
+  legs: WireLeg[];
+  spot: number;
+  iv_pct?: number;
+  dte?: number;
+  spot_range_pct?: number;
+  steps?: number;
+}
+
+export interface StrategyAnalyzeResponse {
+  net_premium: number; // credit (+) / debit (-) in ₹
+  max_profit: number | null;
+  max_loss: number | null;
+  breakevens: number[];
+  greeks: PortfolioGreeks;
+  probability_of_profit: number | null;
+  defined_risk: boolean;
+  margin_estimate: number; // rough, education-only
+  margin_note: string;
+}
+
+/** One-shot analysis of a hypothetical structure (payoff extremes + Greeks + POP
+ * + rough margin). Unauthenticated pure math — no broker, no advice. */
+export function analyzeStrategy(
+  p: StrategyAnalyzeParams,
+  signal?: AbortSignal,
+): Promise<StrategyAnalyzeResponse> {
+  return postJson<StrategyAnalyzeResponse>("/strategy/analyze", p, signal);
+}
+
 /** A leg as edited in the UI (premium/expiry are derived, not entered). */
 export interface UiLeg {
   id: string;
