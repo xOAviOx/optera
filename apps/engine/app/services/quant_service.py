@@ -23,7 +23,13 @@ from app.models import (
     PortfolioGreeks,
     ScenarioRequest,
     ScenarioResponse,
+    StrategyAnalyzeRequest,
+    StrategyAnalyzeResponse,
 )
+
+# Rough naked-short margin as a fraction of notional (SPAN+Exposure ballpark).
+# Deliberately conservative and clearly labelled — never presented as broker-exact.
+_NAKED_MARGIN_PCT = 0.15
 
 DEFAULT_IV = 0.18  # used only when a leg supplies no IV and none is passed in
 
@@ -116,3 +122,67 @@ def compute_pop(req: PopRequest) -> PopResponse:
     # NaN -> None (no finite horizon / vol)
     prob = None if prob != prob else float(prob)
     return PopResponse(probability_of_profit=prob, mode=req.mode)
+
+
+# ── Strategy analyzer (M9) ────────────────────────────────────────────────────
+def _net_premium(quant_legs: list[quant.Leg], mkt: quant.Market) -> float:
+    """Entry cash flow across option legs: credit (+) / debit (-), in ₹.
+
+    BUY pays premium (cash out, debit); SELL receives it (cash in, credit).
+    leg.qty is signed (+ for BUY), so cash flow = -qty * price.
+    """
+    total = 0.0
+    for leg in quant_legs:
+        if leg.is_option:
+            total += -leg.qty * quant.leg_price(leg, mkt)
+    return total
+
+
+def _margin_estimate(
+    quant_legs: list[quant.Leg], mkt: quant.Market, max_loss: float | None
+) -> tuple[bool, float]:
+    """Rough, education-only margin. Defined-risk => capped max loss; otherwise a
+    flat % of short notional. Returns (defined_risk, estimate)."""
+    net_ce = sum(leg.sign * leg.lots for leg in quant_legs if leg.option_type == "CE")
+    net_pe = sum(leg.sign * leg.lots for leg in quant_legs if leg.option_type == "PE")
+    defined = net_ce >= 0 and net_pe >= 0
+    if defined and max_loss is not None:
+        return True, abs(max_loss)
+    short_notional = sum(
+        mkt.spot * leg.lots * leg.lot_size
+        for leg in quant_legs
+        if leg.is_option and leg.sign < 0
+    )
+    return False, _NAKED_MARGIN_PCT * short_notional
+
+
+def analyze_strategy(req: StrategyAnalyzeRequest) -> StrategyAnalyzeResponse:
+    """One-shot analysis of a hypothetical structure: payoff extremes, net premium,
+    Greeks, probability of profit, and a rough margin estimate. No advice."""
+    default_iv = req.iv_pct / 100.0
+    legs = _to_quant_legs(req.legs, default_iv, req.dte)
+    mkt = _market(req.spot)
+
+    payoff = quant.payoff(legs, mkt, range_pct=req.spot_range_pct, steps=req.steps)
+    greeks = quant.portfolio_greeks(legs, mkt)
+    t = req.dte / 365.0 if req.dte else None
+    prob = quant.pop_lognormal(legs, mkt, sigma=default_iv, t=t)
+    prob = None if prob != prob else float(prob)  # NaN -> None
+
+    defined, margin = _margin_estimate(legs, mkt, payoff.max_loss)
+    note = (
+        "Rough education-only estimate — not your broker's SPAN+Exposure margin. "
+        "Defined-risk structures use the capped max loss; naked shorts use "
+        f"~{int(_NAKED_MARGIN_PCT * 100)}% of short notional."
+    )
+    return StrategyAnalyzeResponse(
+        net_premium=_net_premium(legs, mkt),
+        max_profit=payoff.max_profit,
+        max_loss=payoff.max_loss,
+        breakevens=payoff.breakevens,
+        greeks=_to_api_portfolio(greeks),
+        probability_of_profit=prob,
+        defined_risk=defined,
+        margin_estimate=margin,
+        margin_note=note,
+    )
