@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -350,3 +351,43 @@ class StrategyAnalyzeResponse(BaseModel):
     defined_risk: bool
     margin_estimate: float  # rough, education-only — NOT broker SPAN+Exposure
     margin_note: str
+
+
+# ── Trade journal (M9) ────────────────────────────────────────────────────────
+class JournalTradeCreate(BaseModel):
+    """A trade the user logs. Legs are validated on the way in; on read they are
+    returned as-stored (tolerant) so a schema tweak can't brick the journal."""
+
+    legs: list[Leg] = Field(default_factory=list)
+    opened_at: str | None = None  # ISO datetime
+    closed_at: str | None = None  # None => still open (excluded from stats)
+    realized_pnl: float | None = None  # ₹; None => open
+
+
+class JournalTrade(BaseModel):
+    id: str
+    opened_at: str | None = None
+    closed_at: str | None = None
+    legs: list[dict[str, Any]] = Field(default_factory=list)
+    realized_pnl: float | None = None
+    ai_review: str | None = None
+    underlying: str | None = None  # derived from legs, for grouping
+
+
+class JournalStats(BaseModel):
+    closed_trades: int = 0
+    open_trades: int = 0
+    total_realized_pnl: float = 0.0
+    win_rate: float | None = None  # 0..1 over closed trades
+    avg_win: float | None = None
+    avg_loss: float | None = None  # negative
+    profit_factor: float | None = None  # gross win / gross loss
+    best: float | None = None
+    worst: float | None = None
+    pnl_by_underlying: dict[str, float] = Field(default_factory=dict)
+    equity_curve: list[float] = Field(default_factory=list)  # cumulative, by close time
+
+
+class JournalResponse(BaseModel):
+    trades: list[JournalTrade]
+    stats: JournalStats
