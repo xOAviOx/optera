@@ -326,3 +326,27 @@ class AlertCheckResponse(BaseModel):
     snapshot: RiskSnapshot
     fired: list[AlertEvent]
     checked_rules: int
+
+
+# ── Strategy analyzer (M9 — hypothetical/paper only, never advice) ─────────────
+class StrategyAnalyzeRequest(BaseModel):
+    """A hypothetical option structure to analyze. Pure what-if math, no orders."""
+
+    legs: list[Leg]
+    spot: float
+    iv_pct: float = 14.0  # single ATM IV in percent (per-leg iv overrides this)
+    dte: float = 7.0  # days to expiry
+    spot_range_pct: float = 0.15
+    steps: int = 200
+
+
+class StrategyAnalyzeResponse(BaseModel):
+    net_premium: float  # entry cash flow: credit (+) / debit (-), in ₹
+    max_profit: float | None
+    max_loss: float | None
+    breakevens: list[float]
+    greeks: PortfolioGreeks
+    probability_of_profit: float | None
+    defined_risk: bool
+    margin_estimate: float  # rough, education-only — NOT broker SPAN+Exposure
+    margin_note: str
