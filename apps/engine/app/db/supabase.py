@@ -313,3 +313,81 @@ async def patch_alert(
         resp.raise_for_status()
         data = resp.json()
         return data[0] if data else None
+
+
+# ── Trade journal (M9) ────────────────────────────────────────────────────────
+# journal_trades (migration 0001): id, user_id, opened_at, closed_at, legs_jsonb,
+# realized_pnl, ai_review. All writes are service-role and scoped to user_id.
+_JOURNAL_COLUMNS = "id,opened_at,closed_at,legs_jsonb,realized_pnl,ai_review"
+
+
+async def list_journal_trades(user_id: str) -> list[dict[str, Any]]:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base}/journal_trades",
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": _JOURNAL_COLUMNS,
+                # No created_at column; newest closed first, then newest opened.
+                "order": "closed_at.desc.nullslast,opened_at.desc.nullslast",
+            },
+            headers=headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def get_journal_trade(user_id: str, trade_id: str) -> dict[str, Any] | None:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            f"{base}/journal_trades",
+            params={
+                "user_id": f"eq.{user_id}",
+                "id": f"eq.{trade_id}",
+                "select": _JOURNAL_COLUMNS,
+            },
+            headers=headers,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+
+
+async def insert_journal_trade(row: dict[str, Any]) -> dict[str, Any]:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(f"{base}/journal_trades", headers=headers, json=[row])
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else row
+
+
+async def patch_journal_trade(
+    user_id: str, trade_id: str, fields: dict[str, Any]
+) -> dict[str, Any] | None:
+    base, headers = _base_and_headers()
+    headers = {**headers, "Prefer": "return=representation"}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.patch(
+            f"{base}/journal_trades",
+            params={"user_id": f"eq.{user_id}", "id": f"eq.{trade_id}"},
+            headers=headers,
+            json=fields,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data[0] if data else None
+
+
+async def delete_journal_trade(user_id: str, trade_id: str) -> None:
+    base, headers = _base_and_headers()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.delete(
+            f"{base}/journal_trades",
+            params={"user_id": f"eq.{user_id}", "id": f"eq.{trade_id}"},
+            headers=headers,
+        )
+        resp.raise_for_status()
