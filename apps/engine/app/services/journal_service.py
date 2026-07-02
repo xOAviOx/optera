@@ -159,3 +159,124 @@ async def delete_trade(user_id: str, trade_id: str) -> None:
         await supabase.delete_journal_trade(user_id, trade_id)
     except httpx.HTTPStatusError as exc:
         raise _map_missing_tables(exc) from exc
+
+
+# ── AI post-trade review (descriptive, never advice) ──────────────────────────
+SYSTEM_PROMPT = (
+    "You write ONE short, descriptive post-trade review (max 3 sentences) in friendly "
+    "Hinglish (Hindi-English mix) for Optera, an options risk-analytics education tool for "
+    "Indian retail F&O traders. You are given a trade the user already closed (or is still "
+    "holding): its structure, realized P&L, and dates. Describe factually what the structure "
+    "was and how it turned out. Use ₹ and Indian conventions (lakh/crore).\n\n"
+    "HARD RULES — non-negotiable:\n"
+    "1. EDUCATION ONLY. NEVER judge the user or suggest any action — no buy/sell/exit/hold/"
+    "adjust/hedge, no 'next time', no 'aapko ... karna chahiye', no predictions.\n"
+    "2. Be neutral and supportive; describe, don't grade.\n"
+    "3. Output ONLY the review text — no preamble, no quotes, no markdown."
+)
+
+
+def _summarize_legs(legs: list[dict[str, Any]]) -> str:
+    if not legs:
+        return "no legs recorded"
+    parts: list[str] = []
+    for leg in legs:
+        side = str(leg.get("side") or "").upper() or "?"
+        lots = leg.get("lots") or "?"
+        sym = str(leg.get("symbol") or "").strip()
+        strike = leg.get("strike")
+        opt = leg.get("option_type")
+        bits = [f"{side} {lots}x"]
+        if sym and not _LEG_PLACEHOLDER.match(sym):
+            bits.append(sym)
+        if strike is not None and opt:
+            bits.append(f"{strike:g} {opt}")
+        elif strike is not None:
+            bits.append(f"{strike:g}")
+        parts.append(" ".join(bits))
+    return ", ".join(parts)
+
+
+def _outcome(pnl: float | None) -> str:
+    if pnl is None:
+        return "open"
+    if pnl > 0:
+        return "profit"
+    if pnl < 0:
+        return "loss"
+    return "breakeven"
+
+
+def template_review(trade: dict[str, Any]) -> str:
+    """Deterministic fallback review (no LLM). Descriptive only."""
+    summary = _summarize_legs(trade.get("legs") or [])
+    pnl = trade.get("realized_pnl")
+    if pnl is None:
+        return (
+            f"Yeh trade abhi open hai. Structure: {summary}. "
+            "(Descriptive review — koi advice nahi.)"
+        )
+    outcome = {"profit": "profit mein", "loss": "loss mein", "breakeven": "breakeven pe"}[
+        _outcome(pnl)
+    ]
+    return (
+        f"Yeh trade {outcome} close hua, realized P&L {fmt_inr(pnl)}. "
+        f"Structure: {summary}. (Descriptive review — koi advice nahi.)"
+    )
+
+
+async def review_trade(user_id: str, trade_id: str) -> JournalTrade:
+    try:
+        row = await supabase.get_journal_trade(user_id, trade_id)
+    except httpx.HTTPStatusError as exc:
+        raise _map_missing_tables(exc) from exc
+    if not row:
+        raise JournalError("Trade not found.")
+
+    trade = _normalize(row)
+    review = template_review(trade)
+    ai_used = False
+
+    payload = json.dumps(
+        {
+            "structure": _summarize_legs(trade["legs"]),
+            "underlying": trade["underlying"],
+            "outcome": _outcome(trade["realized_pnl"]),
+            "realized_pnl": trade["realized_pnl"],
+            "realized_pnl_formatted": (
+                fmt_inr(trade["realized_pnl"]) if trade["realized_pnl"] is not None else None
+            ),
+            "opened_at": trade["opened_at"],
+            "closed_at": trade["closed_at"],
+        }
+    )
+    try:
+        providers = chat_providers()
+    except LLMNotConfigured:
+        providers = []
+    for provider in providers:
+        try:
+            resp = await provider.complete(
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": payload}],
+                tools=[],
+            )
+        except LLMError:
+            continue  # failover
+        text = (resp.text or "").strip()
+        if not text:
+            continue
+        safe, flagged = advice_filter.screen(text)
+        if flagged:
+            break  # model tried to advise — keep the deterministic template
+        review, ai_used = safe, True
+        break
+
+    try:
+        updated = await supabase.patch_journal_trade(
+            user_id, trade_id, {"ai_review": review}
+        )
+    except httpx.HTTPStatusError as exc:
+        raise _map_missing_tables(exc) from exc
+    logger.info("journal review for %s ai_used=%s", trade_id, ai_used)
+    return JournalTrade(**_normalize(updated or row))
